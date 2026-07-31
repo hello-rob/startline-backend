@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: startline-backend
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: PORT
+        value: 3001
+      - key: NODE_ENV
+        value: production
+      - key: DB_PATH
+        value: /data/startline.db
+    disk:
+      name: startline-data
+      mountPath: /data
+      sizeGB: 1
