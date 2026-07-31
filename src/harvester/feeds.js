@@ -1,48 +1,35 @@
 // src/harvester/feeds.js
-// Each provider has TWO feeds — a SessionSeries feed (names, descriptions)
-// and a ScheduledSessions feed (individual occurrences with dates/availability).
-// We harvest the series first, cache names, then resolve them onto sessions.
-
 const FEEDS = [
-  // ── Active Hartlepool ─────────────────────────────────────────────────────
   {
     name: 'Active Hartlepool',
     seriesFeed: 'https://opendata.leisurecloud.live/api/feeds/HartlepoolBoroughCouncil-live-session-series',
     sessionsFeed: 'https://opendata.leisurecloud.live/api/feeds/HartlepoolBoroughCouncil-live-scheduled-sessions',
-    activity: 'general',
+    activity: 'general'
   },
-
-  // ── Active Leeds ──────────────────────────────────────────────────────────
   {
     name: 'Active Leeds',
     seriesFeed: 'https://opendata.leisurecloud.live/api/feeds/ActiveLeeds-live-session-series',
     sessionsFeed: 'https://opendata.leisurecloud.live/api/feeds/ActiveLeeds-live-scheduled-sessions',
-    activity: 'general',
+    activity: 'general'
   },
-
-  // ── Active Leeds Courses ──────────────────────────────────────────────────
   {
     name: 'Active Leeds Courses',
     seriesFeed: null,
     sessionsFeed: 'https://opendata.leisurecloud.live/api/feeds/ActiveLeeds-live-course-instance',
-    activity: 'general',
+    activity: 'general'
   },
-
-  // ── Active Luton ──────────────────────────────────────────────────────────
   {
     name: 'Active Luton',
     seriesFeed: null,
     sessionsFeed: 'https://activeluton-openactive.legendonlineservices.co.uk/api/sessions',
-    activity: 'general',
+    activity: 'general'
   },
-
-  // ── Active Tameside ───────────────────────────────────────────────────────
   {
     name: 'Active Tameside',
     seriesFeed: null,
     sessionsFeed: 'https://tameside-openactive.legendonlineservices.co.uk/api/sessions',
-    activity: 'general',
-  },
+    activity: 'general'
+  }
 ];
 
 const ACTIVITY_MAP = {
@@ -52,26 +39,21 @@ const ACTIVITY_MAP = {
   swimming:  ['swim', 'open water', 'aqua', 'lane', 'pool'],
   crossfit:  ['crossfit', 'cross fit', 'wod', 'functional fitness'],
   walking:   ['walk', 'hike', 'trek', 'ramble', 'nordic'],
-  gym:       ['gym', 'fitness', 'pilates', 'yoga', 'hiit', 'bootcamp', 'circuits', 'conditioning', 'strength', 'zumba', 'aerobics', 'dance'],
+  gym:       ['gym', 'fitness', 'pilates', 'yoga', 'hiit', 'bootcamp', 'circuits', 'conditioning', 'strength', 'zumba', 'aerobics', 'dance']
 };
 
-function normaliseActivity(rawActivity = '') {
-  const lower = rawActivity.toLowerCase();
-  for (const [category, keywords] of Object.entries(ACTIVITY_MAP)) {
-    if (keywords.some(kw => lower.includes(kw))) return category;
+function normaliseActivity(rawActivity) {
+  if (!rawActivity) return 'general';
+  var lower = rawActivity.toLowerCase();
+  var categories = Object.keys(ACTIVITY_MAP);
+  for (var i = 0; i < categories.length; i++) {
+    var category = categories[i];
+    var keywords = ACTIVITY_MAP[category];
+    for (var j = 0; j < keywords.length; j++) {
+      if (lower.indexOf(keywords[j]) !== -1) return category;
+    }
   }
   return 'general';
 }
 
-module.exports = { FEEDS, normaliseActivity };  gym:       ['gym', 'fitness', 'pilates', 'yoga', 'spin', 'hiit', 'bootcamp'],
-};
-
-function normaliseActivity(rawActivity = '') {
-  const lower = rawActivity.toLowerCase();
-  for (const [category, keywords] of Object.entries(ACTIVITY_MAP)) {
-    if (keywords.some(kw => lower.includes(kw))) return category;
-  }
-  return 'general';
-}
-
-module.exports = { FEEDS, normaliseActivity };
+module.exports = { FEEDS: FEEDS, normaliseActivity: normaliseActivity };
