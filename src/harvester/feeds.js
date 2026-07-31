@@ -1,65 +1,60 @@
 // src/harvester/feeds.js
-// Endurance-focused feeds only — running, cycling, triathlon, open water, CrossFit.
-// No leisure centres or gym class feeds.
+// Only confirmed live OpenActive feeds from status.openactive.io
 
-const FEEDS = [
-  // ── Running ────────────────────────────────────────────────────────────────
-  {
-    name: 'Parkrun UK',
-    seriesFeed: null,
-    sessionsFeed: 'https://api.parkrun.com/m/v1/openactive/sessions',
-    activity: 'running'
-  },
-  {
-    name: 'British Athletics',
-    seriesFeed: 'https://opendata.britishathletics.org.uk/api/feeds/british-athletics-session-series',
-    sessionsFeed: 'https://opendata.britishathletics.org.uk/api/feeds/british-athletics-scheduled-sessions',
-    activity: 'running'
-  },
-  {
-    name: 'England Athletics',
-    seriesFeed: null,
-    sessionsFeed: 'https://eas.englandathletics.org/openactive/api/scheduled-sessions',
-    activity: 'running'
-  },
-
-  // ── Cycling ────────────────────────────────────────────────────────────────
-  {
-    name: 'British Cycling',
-    seriesFeed: null,
-    sessionsFeed: 'https://opendata.britishcycling.org.uk/api/feeds/british-cycling-session-series',
-    activity: 'cycling'
-  },
-
-  // ── Triathlon ──────────────────────────────────────────────────────────────
+var FEEDS = [
+  // British Triathlon — covers Outlaw, Ironman UK, all BTF-sanctioned tri events
   {
     name: 'British Triathlon',
     seriesFeed: null,
-    sessionsFeed: 'https://data.britishtriathlon.org/openactive/api/sessions',
+    sessionsFeed: 'https://api.britishtriathlon.org/openactive/v1/events',
     activity: 'triathlon'
   },
 
-  // ── CrossFit ───────────────────────────────────────────────────────────────
+  // British Cycling — sportives, road races, club rides
   {
-    name: 'CrossFit UK Affiliates',
-    seriesFeed: 'https://openactive.crossfit.com/api/feeds/session-series',
-    sessionsFeed: 'https://openactive.crossfit.com/api/feeds/scheduled-sessions',
-    activity: 'crossfit'
+    name: 'British Cycling',
+    seriesFeed: null,
+    sessionsFeed: 'http://api.letsride.co.uk/public/v1/rides',
+    activity: 'cycling'
   },
 
-  // ── Open Water Swimming ────────────────────────────────────────────────────
+  // British Orienteering — trail and orienteering events
   {
-    name: 'Outdoor Swimmer',
+    name: 'British Orienteering',
     seriesFeed: null,
-    sessionsFeed: 'https://outdoorswimmer.com/openactive/api/sessions',
-    activity: 'swimming'
+    sessionsFeed: 'https://www.britishorienteering.org.uk/fullfixturesjson.php',
+    activity: 'running'
+  },
+
+  // Bookwhen — used by many running clubs and small race organisers
+  {
+    name: 'Bookwhen',
+    seriesFeed: 'https://bookwhen.com/api/openactive/sessionseries',
+    sessionsFeed: 'https://bookwhen.com/api/openactive/scheduledsessions',
+    activity: 'general'
+  },
+
+  // Good Gym — running with a community/charity angle
+  {
+    name: 'Good Gym',
+    seriesFeed: null,
+    sessionsFeed: 'https://www.goodgym.org/api/openactive/events',
+    activity: 'running'
+  },
+
+  // Our Parks — free outdoor fitness events
+  {
+    name: 'Our Parks',
+    seriesFeed: null,
+    sessionsFeed: 'https://ourparks.org.uk/api/events',
+    activity: 'running'
   }
 ];
 
-const ACTIVITY_MAP = {
-  running:   ['run', 'jog', '5k', '10k', 'half marathon', 'marathon', 'parkrun', 'fell', 'athletics', 'cross country', 'track', 'race', 'fun run', 'obstacle'],
-  cycling:   ['cycl', 'bike', 'velodrome', 'sportive', 'mtb', 'mountain bike', 'ride', 'gran fondo', 'audax', 'road race'],
-  triathlon: ['triathlon', 'duathlon', 'aquathlon', 'swimrun'],
+var ACTIVITY_MAP = {
+  running:   ['run', 'jog', '5k', '10k', 'half marathon', 'marathon', 'parkrun', 'fell', 'athletics', 'cross country', 'track', 'race', 'fun run', 'obstacle', 'orienteer'],
+  cycling:   ['cycl', 'bike', 'ride', 'velodrome', 'sportive', 'mtb', 'mountain bike', 'gran fondo', 'audax', 'road race'],
+  triathlon: ['triathlon', 'duathlon', 'aquathlon', 'swimrun', 'ironman', 'outlaw', '70.3'],
   swimming:  ['swim', 'open water', 'wild swim', 'lake swim', 'sea swim', 'river swim'],
   crossfit:  ['crossfit', 'cross fit', 'wod', 'functional fitness', 'hyrox'],
   walking:   ['walk', 'hike', 'trek', 'ramble', 'nordic walking', 'ultra walk']
@@ -68,11 +63,11 @@ const ACTIVITY_MAP = {
 function normaliseActivity(rawActivity) {
   if (!rawActivity) return 'general';
   var lower = rawActivity.toLowerCase();
-  var categories = Object.keys(ACTIVITY_MAP);
-  for (var i = 0; i < categories.length; i++) {
-    var keywords = ACTIVITY_MAP[categories[i]];
-    for (var j = 0; j < keywords.length; j++) {
-      if (lower.indexOf(keywords[j]) !== -1) return categories[i];
+  var keys = Object.keys(ACTIVITY_MAP);
+  for (var i = 0; i < keys.length; i++) {
+    var kws = ACTIVITY_MAP[keys[i]];
+    for (var j = 0; j < kws.length; j++) {
+      if (lower.indexOf(kws[j]) !== -1) return keys[i];
     }
   }
   return 'general';
