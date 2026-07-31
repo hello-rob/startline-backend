@@ -9,18 +9,19 @@ app.use(express.json());
 
 async function db() { return getDb(); }
 
-// Returns today's date as an ISO string prefix for comparison e.g. "2026-07-31"
-// Works with both "2026-08-01" and "2026-08-01T08:00:00+00:00" stored formats
-function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+// Yesterday's date string — includes today's events safely
+function cutoffDate() {
+  var d = new Date();
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().slice(0, 10);
 }
 
 app.get('/api/health', async (req, res) => {
   try {
     const d      = await db();
-    const today  = todayStr();
+    const cutoff = cutoffDate();
     const active = d.prepare("SELECT COUNT(*) as c FROM events WHERE status = 'active'").get({});
-    const future = d.prepare("SELECT COUNT(*) as c FROM events WHERE status = 'active' AND (start_date IS NULL OR substr(start_date,1,10) >= @today)").get({ today });
+    const future = d.prepare("SELECT COUNT(*) as c FROM events WHERE status = 'active' AND (start_date IS NULL OR start_date >= @cutoff)").get({ cutoff });
     const cursor = d.prepare('SELECT MAX(last_synced) as last FROM feed_cursors').get({});
     res.json({ status: 'ok', activeEvents: active.c, futureEvents: future.c, lastHarvest: cursor ? cursor.last : null });
   } catch (err) {
@@ -40,13 +41,12 @@ app.get('/api/events', async (req, res) => {
     } = req.query;
 
     const maxLimit = Math.min(parseInt(limit) || 50, 200);
-    const today    = todayStr();
-    const params   = { today };
+    const cutoff   = cutoffDate();
+    const params   = { cutoff };
 
-    // Only show future events — use substr to handle full ISO timestamps
     var conditions = [
       "status = 'active'",
-      "(start_date IS NULL OR substr(start_date,1,10) >= @today)"
+      "(start_date IS NULL OR start_date >= @cutoff)"
     ];
 
     if (activity && activity !== 'all') {
@@ -102,13 +102,13 @@ app.get('/api/events/:id', async (req, res) => {
 
 app.get('/api/summary', async (req, res) => {
   try {
-    const d    = await db();
-    const today = todayStr();
-    const rows = d.prepare(
+    const d      = await db();
+    const cutoff = cutoffDate();
+    const rows   = d.prepare(
       "SELECT activity, COUNT(*) as count FROM events " +
-      "WHERE status = 'active' AND (start_date IS NULL OR substr(start_date,1,10) >= @today) " +
+      "WHERE status = 'active' AND (start_date IS NULL OR start_date >= @cutoff) " +
       "GROUP BY activity ORDER BY count DESC"
-    ).all({ today });
+    ).all({ cutoff });
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: 'Internal server error' });
