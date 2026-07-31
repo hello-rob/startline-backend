@@ -7,10 +7,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Helper — get db (async, cached after first call)
 async function db() { return getDb(); }
 
-// ── GET /api/health ────────────────────────────────────────────────────────
 app.get('/api/health', async (req, res) => {
   try {
     const d = await db();
@@ -22,13 +20,14 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
-// ── GET /api/events ────────────────────────────────────────────────────────
+// GET /api/events
+// Geo filter is OPTIONAL — if no lat/lng provided, returns all events
 app.get('/api/events', async (req, res) => {
   try {
     const d = await db();
     const {
       lat, lng, radius = 40, activity,
-      from = new Date().toISOString(),
+      from = new Date().toISOString().split('T')[0],
       to, free, sort = 'date', limit = 50, offset = 0,
     } = req.query;
 
@@ -36,28 +35,33 @@ app.get('/api/events', async (req, res) => {
     const toDate   = to || new Date(Date.now() + 180 * 86400000).toISOString();
     const params   = { from, to: toDate };
 
-    let conditions = [`status = 'active'`, `start_date >= @from`, `start_date <= @to`];
+    let conditions = [`status = 'active'`];
+
+    // Only filter by date if events have dates
+    conditions.push(`(start_date IS NULL OR start_date >= @from)`);
+    conditions.push(`(start_date IS NULL OR start_date <= @to)`);
 
     if (activity && activity !== 'all') {
       conditions.push(`activity = @activity`);
       params.activity = activity;
     }
+
     if (free === 'true') conditions.push(`price = 0`);
 
+    // Geo filter only applied if lat AND lng provided AND events have coordinates
     if (lat && lng) {
       const latNum = parseFloat(lat), lngNum = parseFloat(lng), r = parseFloat(radius);
       const latD = r / 111;
       const lngD = r / (111 * Math.cos(latNum * Math.PI / 180));
-      conditions.push(`lat IS NOT NULL AND lng IS NOT NULL`);
-      conditions.push(`lat BETWEEN @latMin AND @latMax`);
-      conditions.push(`lng BETWEEN @lngMin AND @lngMax`);
       params.latMin = latNum - latD; params.latMax = latNum + latD;
       params.lngMin = lngNum - lngD; params.lngMax = lngNum + lngD;
       params.lat = latNum; params.lng = lngNum;
+      // Only geo-filter events that HAVE coordinates; show all others regardless
+      conditions.push(`(lat IS NULL OR lng IS NULL OR (lat BETWEEN @latMin AND @latMax AND lng BETWEEN @lngMin AND @lngMax))`);
     }
 
-    const where = conditions.join(' AND ');
-    const orderBy = sort === 'price' ? 'price ASC' : 'start_date ASC';
+    const where   = conditions.join(' AND ');
+    const orderBy = sort === 'price' ? 'CASE WHEN price IS NULL THEN 1 ELSE 0 END, price ASC' : 'CASE WHEN start_date IS NULL THEN 1 ELSE 0 END, start_date ASC';
 
     const events = d.prepare(`
       SELECT id, name, activity, start_date, end_date,
@@ -73,11 +77,10 @@ app.get('/api/events', async (req, res) => {
     res.json({ total, limit: maxLimit, offset: parseInt(offset), events });
   } catch (err) {
     console.error('GET /api/events error:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: err.message });
   }
 });
 
-// ── GET /api/events/:id ────────────────────────────────────────────────────
 app.get('/api/events/:id', async (req, res) => {
   try {
     const d     = await db();
@@ -89,13 +92,12 @@ app.get('/api/events/:id', async (req, res) => {
   }
 });
 
-// ── GET /api/summary ───────────────────────────────────────────────────────
 app.get('/api/summary', async (req, res) => {
   try {
     const d    = await db();
     const rows = d.prepare(`
       SELECT activity, COUNT(*) as count FROM events
-      WHERE status = 'active' AND start_date >= datetime('now')
+      WHERE status = 'active'
       GROUP BY activity ORDER BY count DESC
     `).all({});
     res.json(rows);
@@ -104,7 +106,6 @@ app.get('/api/summary', async (req, res) => {
   }
 });
 
-// ── POST /api/submit ───────────────────────────────────────────────────────
 app.post('/api/submit', async (req, res) => {
   try {
     const d = await db();
