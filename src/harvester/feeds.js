@@ -1,8 +1,6 @@
 // src/harvester/feeds.js
-// Only confirmed live OpenActive feeds from status.openactive.io
-
 var FEEDS = [
-  // British Triathlon — covers Outlaw, Ironman UK, all BTF-sanctioned tri events
+  // ── Triathlon ──────────────────────────────────────────────────────────────
   {
     name: 'British Triathlon',
     seriesFeed: null,
@@ -10,7 +8,7 @@ var FEEDS = [
     activity: 'triathlon'
   },
 
-  // British Cycling — sportives, road races, club rides
+  // ── Cycling ────────────────────────────────────────────────────────────────
   {
     name: 'British Cycling',
     seriesFeed: null,
@@ -18,11 +16,27 @@ var FEEDS = [
     activity: 'cycling'
   },
 
-  // British Orienteering — trail and orienteering events
+  // ── Running / Orienteering ─────────────────────────────────────────────────
   {
     name: 'British Orienteering',
     seriesFeed: null,
     sessionsFeed: 'https://www.britishorienteering.org.uk/fullfixturesjson.php',
+    activity: 'running'
+  },
+
+  // Good Gym — community running events
+  {
+    name: 'Good Gym',
+    seriesFeed: null,
+    sessionsFeed: 'https://www.goodgym.org/api/openactive/events',
+    activity: 'running'
+  },
+
+  // Our Parks — free outdoor running sessions
+  {
+    name: 'Our Parks',
+    seriesFeed: null,
+    sessionsFeed: 'https://ourparks.org.uk/api/events',
     activity: 'running'
   },
 
@@ -34,25 +48,17 @@ var FEEDS = [
     activity: 'general'
   },
 
-  // Good Gym — running with a community/charity angle
+  // Open Sessions — community sport sessions including running clubs
   {
-    name: 'Good Gym',
-    seriesFeed: null,
-    sessionsFeed: 'https://www.goodgym.org/api/openactive/events',
-    activity: 'running'
-  },
-
-  // Our Parks — free outdoor fitness events
-  {
-    name: 'Our Parks',
-    seriesFeed: null,
-    sessionsFeed: 'https://ourparks.org.uk/api/events',
-    activity: 'running'
+    name: 'Open Sessions',
+    seriesFeed: 'https://opensessions.io/api/rpde/session-series',
+    sessionsFeed: 'https://opensessions.io/api/rpde/events',
+    activity: 'general'
   }
 ];
 
 var ACTIVITY_MAP = {
-  running:   ['run', 'jog', '5k', '10k', 'half marathon', 'marathon', 'parkrun', 'fell', 'athletics', 'cross country', 'track', 'race', 'fun run', 'obstacle', 'orienteer'],
+  running:   ['run', 'jog', '5k', '10k', 'half marathon', 'marathon', 'parkrun', 'fell', 'athletics', 'cross country', 'track', 'race', 'fun run', 'obstacle', 'orienteer', 'trail', 'mud', 'colour run', 'santa run', 'charity run'],
   cycling:   ['cycl', 'bike', 'ride', 'velodrome', 'sportive', 'mtb', 'mountain bike', 'gran fondo', 'audax', 'road race'],
   triathlon: ['triathlon', 'duathlon', 'aquathlon', 'swimrun', 'ironman', 'outlaw', '70.3'],
   swimming:  ['swim', 'open water', 'wild swim', 'lake swim', 'sea swim', 'river swim'],
