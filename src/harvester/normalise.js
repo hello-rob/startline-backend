@@ -5,30 +5,38 @@ function normaliseItem(item, feedMeta, seriesCache) {
   const d = item.data;
   if (!d) return null;
 
-  const activityRaw = extractActivity(d);
-
   const loc  = d.location || d.place || {};
   const addr = loc.address || {};
   const geo  = loc.geo || {};
 
-  const seriesId   = (d.superEvent && d.superEvent['@id']) ? d.superEvent['@id'] : (typeof d.superEvent === 'string' ? d.superEvent : null);
-  const seriesData = seriesId && seriesCache ? seriesCache.get(seriesId) : null;
+  // Resolve parent series
+  const seriesId   = (d.superEvent && d.superEvent['@id'])
+    ? d.superEvent['@id']
+    : (typeof d.superEvent === 'string' ? d.superEvent : null);
+  const seriesData = (seriesId && seriesCache) ? seriesCache.get(seriesId) : null;
 
-  const name        = resolveName(d, seriesData, activityRaw, loc, feedMeta);
+  // Activity: try session first, then series, then feed default
+  const sessionActivityRaw = extractActivity(d);
+  const seriesActivityRaw  = seriesData ? extractActivity(seriesData.raw || {}) : '';
+  const activityRaw        = sessionActivityRaw || seriesActivityRaw || '';
+
+  const activity = feedMeta.activity !== 'general'
+    ? feedMeta.activity
+    : normaliseActivity(activityRaw);
+
+  // Name
+  const name = resolveName(d, seriesData, activityRaw, loc, feedMeta);
+
+  // Description
   const description = d.description || (seriesData ? seriesData.description : null) || null;
 
-  var resolvedActivityRaw = activityRaw || (seriesData ? seriesData.activityRaw : '') || '';
-  const activity = feedMeta.activity === 'general'
-    ? normaliseActivity(resolvedActivityRaw)
-    : feedMeta.activity;
-
-  const resolvedLoc  = (loc.name || addr.streetAddress) ? loc : ((seriesData && seriesData.loc) ? seriesData.loc : loc);
-  const resolvedAddr = resolvedLoc.address || addr;
-  const resolvedGeo  = resolvedLoc.geo || geo;
+  // Location: prefer session, fall back to series
+  const seriesLoc  = seriesData ? (seriesData.loc || {}) : {};
+  const resolvedLoc  = (loc.name || addr.streetAddress) ? loc : seriesLoc;
+  const resolvedAddr = resolvedLoc.address || {};
+  const resolvedGeo  = resolvedLoc.geo || {};
 
   const startDate = d.startDate || d.startTime || null;
-  // NOTE: we do NOT filter out past events here — let the API/DB handle that
-  // so we don't accidentally drop events due to timezone differences
 
   return {
     id:              d['@id'] || item.id,
@@ -37,7 +45,7 @@ function normaliseItem(item, feedMeta, seriesCache) {
     name:            name,
     description:     description,
     activity:        activity,
-    activity_raw:    resolvedActivityRaw,
+    activity_raw:    activityRaw,
     start_date:      startDate,
     end_date:        d.endDate || d.endTime || null,
     duration:        d.duration || (seriesData ? seriesData.duration : null) || null,
@@ -47,11 +55,11 @@ function normaliseItem(item, feedMeta, seriesCache) {
     postcode:        resolvedAddr.postalCode || null,
     lat:             parseFloat(resolvedGeo.latitude)  || null,
     lng:             parseFloat(resolvedGeo.longitude) || null,
-    price:           extractPrice(d) !== null ? extractPrice(d) : (seriesData ? extractPrice(seriesData.raw || {}) : null),
+    price:           extractPrice(d) !== null ? extractPrice(d) : extractPrice((seriesData && seriesData.raw) ? seriesData.raw : {}),
     price_currency:  'GBP',
     url:             d.url || (seriesData ? seriesData.url : null) || d['@id'] || null,
-    organiser_name:  extractOrganiser(d, seriesData),
-    organiser_url:   extractOrganiserUrl(d, seriesData),
+    organiser_name:  extractOrganiser(d) || (seriesData ? extractOrganiser(seriesData.raw || {}) : null),
+    organiser_url:   extractOrganiserUrl(d) || (seriesData ? extractOrganiserUrl(seriesData.raw || {}) : null),
     max_attendees:   d.maximumAttendeeCapacity || null,
     remaining_spots: d.remainingAttendeeCapacity || null,
     status:          'active'
@@ -75,76 +83,66 @@ function normaliseSeriesItem(item, feedMeta) {
 }
 
 function resolveName(d, seriesData, activityRaw, loc, feedMeta) {
-  if (d.name && d.name.trim() && isUsefulName(d.name)) return d.name.trim();
+  if (d.name && isUsefulName(d.name)) return d.name.trim();
   if (seriesData && seriesData.name && isUsefulName(seriesData.name)) return seriesData.name.trim();
   if (d.superEvent && d.superEvent.name && isUsefulName(d.superEvent.name)) return d.superEvent.name.trim();
 
-  var activity = activityRaw || (seriesData ? seriesData.activityRaw : '') || '';
-  var actLabel = activity ? activity.charAt(0).toUpperCase() + activity.slice(1) : null;
+  const actLabel = activityRaw
+    ? activityRaw.charAt(0).toUpperCase() + activityRaw.slice(1)
+    : null;
 
-  var seriesLoc = seriesData ? seriesData.loc : null;
-  var place = null;
-  if (loc && loc.name && isUsefulName(loc.name)) {
-    place = loc.name;
-  } else if (seriesLoc && seriesLoc.name && isUsefulName(seriesLoc.name)) {
-    place = seriesLoc.name;
-  } else if (loc && loc.address && loc.address.addressLocality) {
-    place = loc.address.addressLocality;
-  } else if (seriesLoc && seriesLoc.address && seriesLoc.address.addressLocality) {
-    place = seriesLoc.address.addressLocality;
-  }
+  const seriesLoc = seriesData ? (seriesData.loc || {}) : {};
+  const place = (loc.name && isUsefulName(loc.name)) ? loc.name
+    : (seriesLoc.name && isUsefulName(seriesLoc.name)) ? seriesLoc.name
+    : (loc.address && loc.address.addressLocality) ? loc.address.addressLocality
+    : (seriesLoc.address && seriesLoc.address.addressLocality) ? seriesLoc.address.addressLocality
+    : null;
 
-  var parts = [];
+  const parts = [];
   if (actLabel) parts.push(actLabel);
   if (place) parts.push('at ' + place);
   if (parts.length > 1) return parts.join(' ');
 
-  var provider = feedMeta.name.replace(/ — (Sessions|Courses)$/, '');
-  if (actLabel) return actLabel + ' \u00b7 ' + provider;
-  return 'Activity \u00b7 ' + provider;
+  const provider = feedMeta.name.replace(/ — (Sessions|Courses)$/, '');
+  if (actLabel) return actLabel + ' · ' + provider;
+  return 'Activity · ' + provider;
 }
 
 function isUsefulName(name) {
   if (!name || !name.trim()) return false;
-  if (name.startsWith('https://') || name.startsWith('http://')) return false;
-  var lower = name.toLowerCase().trim();
-  var useless = ['scheduledsession', 'sessionseries', 'courseinstance', 'event', 'session'];
+  if (name.startsWith('http')) return false;
+  const lower = name.toLowerCase().trim();
+  const useless = ['scheduledsession', 'sessionseries', 'courseinstance', 'event', 'session'];
   return useless.indexOf(lower) === -1;
 }
 
 function extractActivity(d) {
   if (!d) return '';
-  if (Array.isArray(d.activity) && d.activity.length > 0) return d.activity[0].prefLabel || '';
+  if (Array.isArray(d.activity) && d.activity.length > 0) {
+    return d.activity[0].prefLabel || d.activity[0].id || '';
+  }
   if (typeof d.activity === 'string') return d.activity;
   return '';
 }
 
 function extractPrice(d) {
   if (!d) return null;
-  var offers = Array.isArray(d.offers) ? d.offers : (d.offers ? [d.offers] : []);
+  const offers = Array.isArray(d.offers) ? d.offers : (d.offers ? [d.offers] : []);
   if (!offers.length) return null;
-  var prices = offers.map(function(o) { return parseFloat(o.price); }).filter(function(p) { return !isNaN(p); });
+  const prices = offers.map(function(o) { return parseFloat(o.price); }).filter(function(p) { return !isNaN(p); });
   return prices.length ? Math.min.apply(null, prices) : null;
 }
 
-function extractOrganiser(d, seriesData) {
-  var org = d.organizer || d.provider || d.organiser || null;
-  if (org && org.name) return org.name;
-  if (seriesData && seriesData.raw) {
-    var sorg = seriesData.raw.organizer || seriesData.raw.provider || seriesData.raw.organiser || null;
-    if (sorg && sorg.name) return sorg.name;
-  }
-  return null;
+function extractOrganiser(d) {
+  if (!d) return null;
+  const org = d.organizer || d.provider || d.organiser || null;
+  return (org && org.name) ? org.name : null;
 }
 
-function extractOrganiserUrl(d, seriesData) {
-  var org = d.organizer || d.provider || d.organiser || null;
-  if (org && org.url) return org.url;
-  if (seriesData && seriesData.raw) {
-    var sorg = seriesData.raw.organizer || seriesData.raw.provider || seriesData.raw.organiser || null;
-    if (sorg && sorg.url) return sorg.url;
-  }
-  return null;
+function extractOrganiserUrl(d) {
+  if (!d) return null;
+  const org = d.organizer || d.provider || d.organiser || null;
+  return (org && org.url) ? org.url : null;
 }
 
 module.exports = { normaliseItem: normaliseItem, normaliseSeriesItem: normaliseSeriesItem };
