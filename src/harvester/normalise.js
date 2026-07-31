@@ -17,10 +17,7 @@ function normaliseItem(item, feedMeta) {
   const addr = loc.address || {};
   const geo  = loc.geo || {};
 
-  // ── Name resolution ───────────────────────────────────────────────────────
-  // OpenActive ScheduledSessions often have no name of their own — it lives on
-  // the parent SessionSeries. We try several fallbacks before giving up.
-  const resolvedName = resolveName(d, activityRaw, loc, startDate);
+  const resolvedName = resolveName(d, activity, loc, startDate, feedMeta);
 
   return {
     id:             d['@id'] || item.id,
@@ -50,30 +47,39 @@ function normaliseItem(item, feedMeta) {
   };
 }
 
-function resolveName(d, activityRaw, loc, startDate) {
-  // 1. Direct name on the item
-  if (d.name && d.name.trim()) return d.name.trim();
+function resolveName(d, activity, loc, startDate, feedMeta) {
+  // 1. Direct name on the item (ignore OpenActive type strings)
+  if (d.name && d.name.trim() && !d.name.includes('Session') && !d.name.includes('Event'))
+    return d.name.trim();
 
-  // 2. Name on a superEvent (parent SessionSeries reference)
-  if (d.superEvent?.name && d.superEvent.name.trim()) return d.superEvent.name.trim();
+  // 2. Allow "Session" names if they have more context e.g. "Swim Session"
+  if (d.name && d.name.trim() && d.name.trim().split(' ').length > 1)
+    return d.name.trim();
 
-  // 3. Name on a referenced event
-  if (d.event?.name && d.event.name.trim()) return d.event.name.trim();
+  // 3. Parent SessionSeries name
+  if (d.superEvent?.name && d.superEvent.name.trim())
+    return d.superEvent.name.trim();
 
-  // 4. Build a descriptive name from activity + location + time
+  // 4. Referenced event name
+  if (d.event?.name && d.event.name.trim())
+    return d.event.name.trim();
+
+  // 5. Build from activity + location + time
   const parts = [];
 
-  // Activity label
-  const actLabel = activityRaw
-    ? activityRaw.charAt(0).toUpperCase() + activityRaw.slice(1)
+  // Use the normalised activity label (running, cycling etc)
+  const actLabel = activity
+    ? activity.charAt(0).toUpperCase() + activity.slice(1)
     : null;
-  if (actLabel) parts.push(actLabel);
 
-  // Location
-  const place = loc?.name || loc?.address?.addressLocality || null;
+  // Location name (not a generic type string)
+  const place = loc?.name && !loc.name.includes('https://')
+    ? loc.name
+    : loc?.address?.addressLocality || loc?.address?.addressRegion || null;
+
+  if (actLabel) parts.push(actLabel);
   if (place) parts.push(`at ${place}`);
 
-  // Day + time
   if (startDate) {
     const dt   = new Date(startDate);
     const day  = dt.toLocaleDateString('en-GB', { weekday: 'short' });
@@ -81,17 +87,20 @@ function resolveName(d, activityRaw, loc, startDate) {
     parts.push(`— ${day} ${time}`);
   }
 
-  if (parts.length > 0) return parts.join(' ');
+  if (parts.length > 1) return parts.join(' ');
 
-  // 5. Last resort
-  return 'Activity session';
+  // 6. Fall back to the provider name + session
+  const provider = feedMeta.name.replace(' — Sessions', '').replace(' — Courses', '');
+  if (actLabel) return `${actLabel} session · ${provider}`;
+  return `Session · ${provider}`;
 }
 
 function extractActivity(d) {
+  // Only use prefLabel — never use @type as it returns "ScheduledSession" etc.
   if (Array.isArray(d.activity) && d.activity.length > 0)
-    return d.activity[0].prefLabel || d.activity[0].id || '';
+    return d.activity[0].prefLabel || '';
   if (typeof d.activity === 'string') return d.activity;
-  return d['@type'] || '';
+  return '';
 }
 
 function extractPrice(d) {
