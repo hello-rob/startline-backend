@@ -13,8 +13,9 @@ app.get('/api/health', async (req, res) => {
   try {
     const d      = await db();
     const active = d.prepare("SELECT COUNT(*) as c FROM events WHERE status = 'active'").get({});
+    const future = d.prepare("SELECT COUNT(*) as c FROM events WHERE status = 'active' AND (start_date IS NULL OR start_date >= date('now'))").get({});
     const cursor = d.prepare('SELECT MAX(last_synced) as last FROM feed_cursors').get({});
-    res.json({ status: 'ok', activeEvents: active.c, lastHarvest: cursor ? cursor.last : null });
+    res.json({ status: 'ok', activeEvents: active.c, futureEvents: future.c, lastHarvest: cursor ? cursor.last : null });
   } catch (err) {
     res.status(500).json({ status: 'error', message: err.message });
   }
@@ -23,20 +24,44 @@ app.get('/api/health', async (req, res) => {
 app.get('/api/events', async (req, res) => {
   try {
     const d = await db();
-    const { activity, sort = 'date', limit = 50, offset = 0 } = req.query;
-    const maxLimit = Math.min(parseInt(limit) || 50, 200);
+    const {
+      lat, lng, radius = 40,
+      activity,
+      sort   = 'date',
+      limit  = 50,
+      offset = 0
+    } = req.query;
 
-    var conditions = ["status = 'active'"];
-    var params     = {};
+    const maxLimit = Math.min(parseInt(limit) || 50, 200);
+    const params   = {};
+
+    // Always show only future events (or events with no date)
+    var conditions = [
+      "status = 'active'",
+      "(start_date IS NULL OR start_date >= date('now'))"
+    ];
 
     if (activity && activity !== 'all') {
       conditions.push('activity = @activity');
       params.activity = activity;
     }
 
+    // Geo filter — only applied when lat/lng provided AND radius isn't 'all'
+    if (lat && lng && radius !== 'all') {
+      var latNum = parseFloat(lat);
+      var lngNum = parseFloat(lng);
+      var r      = parseFloat(radius);
+      var latD   = r / 111;
+      var lngD   = r / (111 * Math.cos(latNum * Math.PI / 180));
+      params.latMin = latNum - latD; params.latMax = latNum + latD;
+      params.lngMin = lngNum - lngD; params.lngMax = lngNum + lngD;
+      // Show events within radius OR events with no location (so they're not hidden)
+      conditions.push('(lat IS NULL OR lng IS NULL OR (lat BETWEEN @latMin AND @latMax AND lng BETWEEN @lngMin AND @lngMax))');
+    }
+
     var where   = conditions.join(' AND ');
     var orderBy = sort === 'price'
-      ? 'CASE WHEN price IS NULL THEN 1 ELSE 0 END, price ASC'
+      ? 'CASE WHEN price IS NULL THEN 1 ELSE 0 END, price ASC, CASE WHEN start_date IS NULL THEN 1 ELSE 0 END, start_date ASC'
       : 'CASE WHEN start_date IS NULL THEN 1 ELSE 0 END, start_date ASC';
 
     var events = d.prepare(
@@ -73,7 +98,9 @@ app.get('/api/summary', async (req, res) => {
   try {
     const d    = await db();
     const rows = d.prepare(
-      "SELECT activity, COUNT(*) as count FROM events WHERE status = 'active' GROUP BY activity ORDER BY count DESC"
+      "SELECT activity, COUNT(*) as count FROM events " +
+      "WHERE status = 'active' AND (start_date IS NULL OR start_date >= date('now')) " +
+      "GROUP BY activity ORDER BY count DESC"
     ).all({});
     res.json(rows);
   } catch (err) {
@@ -89,7 +116,7 @@ app.post('/api/submit', async (req, res) => {
     d.prepare(
       'INSERT INTO submitted_events (name, sport, event_date, location, price, spaces, reg_link, description) ' +
       'VALUES (@name, @sport, @event_date, @location, @price, @spaces, @reg_link, @description)'
-    ).run({ name: name, sport: sport, event_date: event_date, location: location, price: price, spaces: spaces, reg_link: reg_link, description: description });
+    ).run({ name, sport, event_date, location, price, spaces, reg_link, description });
     res.status(201).json({ message: 'Event submitted for review' });
   } catch (err) {
     res.status(500).json({ error: 'Internal server error' });
