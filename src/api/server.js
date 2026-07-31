@@ -9,11 +9,18 @@ app.use(express.json());
 
 async function db() { return getDb(); }
 
+// Returns today's date as an ISO string prefix for comparison e.g. "2026-07-31"
+// Works with both "2026-08-01" and "2026-08-01T08:00:00+00:00" stored formats
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 app.get('/api/health', async (req, res) => {
   try {
     const d      = await db();
+    const today  = todayStr();
     const active = d.prepare("SELECT COUNT(*) as c FROM events WHERE status = 'active'").get({});
-    const future = d.prepare("SELECT COUNT(*) as c FROM events WHERE status = 'active' AND (start_date IS NULL OR start_date >= date('now'))").get({});
+    const future = d.prepare("SELECT COUNT(*) as c FROM events WHERE status = 'active' AND (start_date IS NULL OR substr(start_date,1,10) >= @today)").get({ today });
     const cursor = d.prepare('SELECT MAX(last_synced) as last FROM feed_cursors').get({});
     res.json({ status: 'ok', activeEvents: active.c, futureEvents: future.c, lastHarvest: cursor ? cursor.last : null });
   } catch (err) {
@@ -33,12 +40,13 @@ app.get('/api/events', async (req, res) => {
     } = req.query;
 
     const maxLimit = Math.min(parseInt(limit) || 50, 200);
-    const params   = {};
+    const today    = todayStr();
+    const params   = { today };
 
-    // Always show only future events (or events with no date)
+    // Only show future events — use substr to handle full ISO timestamps
     var conditions = [
       "status = 'active'",
-      "(start_date IS NULL OR start_date >= date('now'))"
+      "(start_date IS NULL OR substr(start_date,1,10) >= @today)"
     ];
 
     if (activity && activity !== 'all') {
@@ -46,7 +54,6 @@ app.get('/api/events', async (req, res) => {
       params.activity = activity;
     }
 
-    // Geo filter — only applied when lat/lng provided AND radius isn't 'all'
     if (lat && lng && radius !== 'all') {
       var latNum = parseFloat(lat);
       var lngNum = parseFloat(lng);
@@ -55,7 +62,6 @@ app.get('/api/events', async (req, res) => {
       var lngD   = r / (111 * Math.cos(latNum * Math.PI / 180));
       params.latMin = latNum - latD; params.latMax = latNum + latD;
       params.lngMin = lngNum - lngD; params.lngMax = lngNum + lngD;
-      // Show events within radius OR events with no location (so they're not hidden)
       conditions.push('(lat IS NULL OR lng IS NULL OR (lat BETWEEN @latMin AND @latMax AND lng BETWEEN @lngMin AND @lngMax))');
     }
 
@@ -97,11 +103,12 @@ app.get('/api/events/:id', async (req, res) => {
 app.get('/api/summary', async (req, res) => {
   try {
     const d    = await db();
+    const today = todayStr();
     const rows = d.prepare(
       "SELECT activity, COUNT(*) as count FROM events " +
-      "WHERE status = 'active' AND (start_date IS NULL OR start_date >= date('now')) " +
+      "WHERE status = 'active' AND (start_date IS NULL OR substr(start_date,1,10) >= @today) " +
       "GROUP BY activity ORDER BY count DESC"
-    ).all({});
+    ).all({ today });
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: 'Internal server error' });
