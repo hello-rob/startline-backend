@@ -17,11 +17,16 @@ function normaliseItem(item, feedMeta) {
   const addr = loc.address || {};
   const geo  = loc.geo || {};
 
+  // ── Name resolution ───────────────────────────────────────────────────────
+  // OpenActive ScheduledSessions often have no name of their own — it lives on
+  // the parent SessionSeries. We try several fallbacks before giving up.
+  const resolvedName = resolveName(d, activityRaw, loc, startDate);
+
   return {
     id:             d['@id'] || item.id,
     source_feed:    feedMeta.name,
     modified:       item.modified || 0,
-    name:           d.name || 'Unnamed event',
+    name:           resolvedName,
     description:    d.description || null,
     activity,
     activity_raw:   activityRaw,
@@ -43,6 +48,43 @@ function normaliseItem(item, feedMeta) {
     remaining_spots: d.remainingAttendeeCapacity || null,
     status: 'active',
   };
+}
+
+function resolveName(d, activityRaw, loc, startDate) {
+  // 1. Direct name on the item
+  if (d.name && d.name.trim()) return d.name.trim();
+
+  // 2. Name on a superEvent (parent SessionSeries reference)
+  if (d.superEvent?.name && d.superEvent.name.trim()) return d.superEvent.name.trim();
+
+  // 3. Name on a referenced event
+  if (d.event?.name && d.event.name.trim()) return d.event.name.trim();
+
+  // 4. Build a descriptive name from activity + location + time
+  const parts = [];
+
+  // Activity label
+  const actLabel = activityRaw
+    ? activityRaw.charAt(0).toUpperCase() + activityRaw.slice(1)
+    : null;
+  if (actLabel) parts.push(actLabel);
+
+  // Location
+  const place = loc?.name || loc?.address?.addressLocality || null;
+  if (place) parts.push(`at ${place}`);
+
+  // Day + time
+  if (startDate) {
+    const dt   = new Date(startDate);
+    const day  = dt.toLocaleDateString('en-GB', { weekday: 'short' });
+    const time = dt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    parts.push(`— ${day} ${time}`);
+  }
+
+  if (parts.length > 0) return parts.join(' ');
+
+  // 5. Last resort
+  return 'Activity session';
 }
 
 function extractActivity(d) {
