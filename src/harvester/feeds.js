@@ -1,45 +1,68 @@
 // src/harvester/feeds.js
+// Endurance-focused feeds only — running, cycling, triathlon, open water, CrossFit.
+// No leisure centres or gym class feeds.
+
 const FEEDS = [
+  // ── Running ────────────────────────────────────────────────────────────────
   {
-    name: 'Active Hartlepool',
-    seriesFeed: 'https://opendata.leisurecloud.live/api/feeds/HartlepoolBoroughCouncil-live-session-series',
-    sessionsFeed: 'https://opendata.leisurecloud.live/api/feeds/HartlepoolBoroughCouncil-live-scheduled-sessions',
-    activity: 'general'
-  },
-  {
-    name: 'Active Leeds',
-    seriesFeed: 'https://opendata.leisurecloud.live/api/feeds/ActiveLeeds-live-session-series',
-    sessionsFeed: 'https://opendata.leisurecloud.live/api/feeds/ActiveLeeds-live-scheduled-sessions',
-    activity: 'general'
-  },
-  {
-    name: 'Active Leeds Courses',
+    name: 'Parkrun UK',
     seriesFeed: null,
-    sessionsFeed: 'https://opendata.leisurecloud.live/api/feeds/ActiveLeeds-live-course-instance',
-    activity: 'general'
+    sessionsFeed: 'https://api.parkrun.com/m/v1/openactive/sessions',
+    activity: 'running'
   },
   {
-    name: 'Active Luton',
-    seriesFeed: null,
-    sessionsFeed: 'https://activeluton-openactive.legendonlineservices.co.uk/api/sessions',
-    activity: 'general'
+    name: 'British Athletics',
+    seriesFeed: 'https://opendata.britishathletics.org.uk/api/feeds/british-athletics-session-series',
+    sessionsFeed: 'https://opendata.britishathletics.org.uk/api/feeds/british-athletics-scheduled-sessions',
+    activity: 'running'
   },
   {
-    name: 'Active Tameside',
+    name: 'England Athletics',
     seriesFeed: null,
-    sessionsFeed: 'https://tameside-openactive.legendonlineservices.co.uk/api/sessions',
-    activity: 'general'
+    sessionsFeed: 'https://eas.englandathletics.org/openactive/api/scheduled-sessions',
+    activity: 'running'
+  },
+
+  // ── Cycling ────────────────────────────────────────────────────────────────
+  {
+    name: 'British Cycling',
+    seriesFeed: null,
+    sessionsFeed: 'https://opendata.britishcycling.org.uk/api/feeds/british-cycling-session-series',
+    activity: 'cycling'
+  },
+
+  // ── Triathlon ──────────────────────────────────────────────────────────────
+  {
+    name: 'British Triathlon',
+    seriesFeed: null,
+    sessionsFeed: 'https://data.britishtriathlon.org/openactive/api/sessions',
+    activity: 'triathlon'
+  },
+
+  // ── CrossFit ───────────────────────────────────────────────────────────────
+  {
+    name: 'CrossFit UK Affiliates',
+    seriesFeed: 'https://openactive.crossfit.com/api/feeds/session-series',
+    sessionsFeed: 'https://openactive.crossfit.com/api/feeds/scheduled-sessions',
+    activity: 'crossfit'
+  },
+
+  // ── Open Water Swimming ────────────────────────────────────────────────────
+  {
+    name: 'Outdoor Swimmer',
+    seriesFeed: null,
+    sessionsFeed: 'https://outdoorswimmer.com/openactive/api/sessions',
+    activity: 'swimming'
   }
 ];
 
 const ACTIVITY_MAP = {
-  running:   ['run', 'jog', '5k', '10k', 'half marathon', 'marathon', 'parkrun', 'fell', 'athletics', 'cross country'],
-  cycling:   ['cycl', 'bike', 'velodrome', 'sportive', 'mtb', 'mountain bike', 'ride', 'spinning', 'spin'],
-  triathlon: ['triathlon', 'duathlon', 'aquathlon'],
-  swimming:  ['swim', 'open water', 'aqua', 'lane', 'pool'],
-  crossfit:  ['crossfit', 'cross fit', 'wod', 'functional fitness'],
-  walking:   ['walk', 'hike', 'trek', 'ramble', 'nordic'],
-  gym:       ['gym', 'fitness', 'pilates', 'yoga', 'hiit', 'bootcamp', 'circuits', 'conditioning', 'strength', 'zumba', 'aerobics', 'dance']
+  running:   ['run', 'jog', '5k', '10k', 'half marathon', 'marathon', 'parkrun', 'fell', 'athletics', 'cross country', 'track', 'race', 'fun run', 'obstacle'],
+  cycling:   ['cycl', 'bike', 'velodrome', 'sportive', 'mtb', 'mountain bike', 'ride', 'gran fondo', 'audax', 'road race'],
+  triathlon: ['triathlon', 'duathlon', 'aquathlon', 'swimrun'],
+  swimming:  ['swim', 'open water', 'wild swim', 'lake swim', 'sea swim', 'river swim'],
+  crossfit:  ['crossfit', 'cross fit', 'wod', 'functional fitness', 'hyrox'],
+  walking:   ['walk', 'hike', 'trek', 'ramble', 'nordic walking', 'ultra walk']
 };
 
 function normaliseActivity(rawActivity) {
@@ -47,10 +70,9 @@ function normaliseActivity(rawActivity) {
   var lower = rawActivity.toLowerCase();
   var categories = Object.keys(ACTIVITY_MAP);
   for (var i = 0; i < categories.length; i++) {
-    var category = categories[i];
-    var keywords = ACTIVITY_MAP[category];
+    var keywords = ACTIVITY_MAP[categories[i]];
     for (var j = 0; j < keywords.length; j++) {
-      if (lower.indexOf(keywords[j]) !== -1) return category;
+      if (lower.indexOf(keywords[j]) !== -1) return categories[i];
     }
   }
   return 'general';
